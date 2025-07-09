@@ -101,9 +101,9 @@ class BrowserAgent:
         elif direction == "向右": dx = amount
         elif direction == "向左": dx = -amount
         else:
-            print("⚠️ 未知滚动方向")
+            logger.warning("⚠️ 未知滚动方向")
             return
-        print(f"→ 滚动页面 ({dx}, {dy})")
+        logger.info(f"→ 滚动页面 ({dx}, {dy})")
         self.page.mouse.wheel(dx, dy)
     
     def back(self):
@@ -117,7 +117,7 @@ class BrowserAgent:
     def wait_for_load(self, timeout=30000):
         """等待页面加载完成"""
         self.page.wait_for_load_state("networkidle", timeout=timeout)
-        print("→ 页面加载完成")
+        logger.info("→ 页面加载完成")
 
 class webBrowserOperator:
     def __init__(self, url):
@@ -140,7 +140,7 @@ class webBrowserOperator:
     def wait(self, timeout=30000):
         """等待页面加载完成"""
         time.sleep(5)  # 等待5秒，确保操作稳定
-        print("→ 等待页面加载...")
+        logger.info("→ 等待页面加载...")
         self.agent.wait_for_load(timeout)
         
 
@@ -156,14 +156,14 @@ def test_web_browser_operator():
 
     # 1. 截图测试
     operator.screen_shot()
-    print("✅ 已保存页面截图到 output_screenshot.png")
+    logger.success("已保存页面截图到 output_screenshot.png")
 
     # 2. 测试输入（模拟点击搜索框并输入）
     type_op = {
         "type": "TYPE"
     }
     operator.execute(type_op, {"box": [580, 16, 837, 49]}, text="洛天依演唱会")
-    print("✅ 已输入关键词")
+    logger.success("已输入关键词")
     operator.wait()
 
     # 3. 测试点击
@@ -172,7 +172,7 @@ def test_web_browser_operator():
     }
     dummy_box = [806, 25, 819, 40]
     operator.execute(click_op, {"box": dummy_box})
-    print("✅ 已模拟点击")
+    logger.success("已模拟点击")
 
     operator.wait()
 
@@ -182,14 +182,14 @@ def test_web_browser_operator():
         "direction": "向下"
     }
     operator.execute(scroll_op, {})
-    print("✅ 已执行滚动操作")
+    logger.success("已执行滚动操作")
 
     # 等待观察效果
     operator.wait()
 
     # 关闭浏览器
     operator.agent.close()
-    print("✅ 浏览器已关闭")
+    logger.success("✅ 浏览器已关闭")
 
 if __name__ == "__main__":
     test_web_browser_operator()
