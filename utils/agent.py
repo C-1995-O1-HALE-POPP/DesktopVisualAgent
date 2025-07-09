@@ -23,12 +23,12 @@ def do_instruction_from_todo(todo: dict, history):
         if not all(k in params for k in ("target", "pos", "text")):
             raise ValueError("[TYPE] 缺少必要参数（target, pos, text）")
         prompt = f"请找出页面中用于输入“{params['target']}”相关内容的输入框，位于{params['pos']}，我将输入“{params['text']}”。"
-        box_data = grounding(prompt)
+        box_data = grounding(prompt)["box"]
     elif action == "CLICK":
         if not all(k in params for k in ("target", "pos")):
             raise ValueError("[CLICK] 缺少必要参数（target, pos）")
         prompt = f"请找出页面中标注为“{params['target']}”的按钮或可点击区域，位于{params['pos']}，我准备点击它。"
-        box_data = grounding(prompt)
+        box_data = grounding(prompt)["box"]
     elif action == "SCROLL":
         if "direction" not in params:
             raise ValueError("[SCROLL] 缺少必要参数（direction）")

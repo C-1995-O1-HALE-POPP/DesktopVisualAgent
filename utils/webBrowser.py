@@ -2,9 +2,15 @@
 from playwright.sync_api import sync_playwright
 from PIL import Image
 from io import BytesIO
+from loguru import logger
+from pathlib import Path
+
+import os
 import base64
 import time
-OUTPUT_IMAGE_PATH = "output_screenshot.png"
+
+from utils.imageProcessing import get_date_time
+from utils import INPUT_IMAGE_PATH, RECORD_IMAGE_PATH
 class BrowserAgent:
     def __init__(self, headless=False, resolution=(1280, 720)):
         self.playwright = sync_playwright().start()
@@ -15,19 +21,20 @@ class BrowserAgent:
         )
         self.page = self.context.new_page()
         self.context.on("page", self._on_new_page)
+        logger.success(f"浏览器已启动，分辨率设置为: {resolution[0]}x{resolution[1]}")
     def _on_new_page(self, new_page):
         try:
-            print("📄 监听到新页面打开，等待加载中...")
-            new_page.wait_for_load_state("load", timeout=10000)
+            logger.info("监听到新页面打开，等待加载中...")
+            new_page.wait_for_load_state("load", timeout=30000)
 
             if new_page.is_closed():
-                print("⚠️ 新页面已关闭，放弃切换")
+                logger.warning("⚠️ 新页面已关闭，放弃切换")
                 return
 
             self.page = new_page
-            print("✅ 成功切换到新页面")
+            logger.info("成功切换到新页面")
         except Exception as e:
-            print(f"❌ 切换到新页面失败: {e}")
+            logger.error(f"切换到新页面失败: {e}")
     def goto(self, url: str):
         self.page.goto(url)
 
@@ -35,32 +42,55 @@ class BrowserAgent:
         """截图并保存到本地（PNG）"""
         img_bytes = self.page.screenshot(full_page=False)
         img = Image.open(BytesIO(img_bytes)).convert("RGB")
-        img.save(OUTPUT_IMAGE_PATH, format="PNG")
+        img.save(INPUT_IMAGE_PATH, format="PNG")
+        logger.success(f"已保存页面截图到 {INPUT_IMAGE_PATH}")
+        if RECORD_IMAGE_PATH:
+            if not os.path.exists(RECORD_IMAGE_PATH):
+                os.makedirs(RECORD_IMAGE_PATH)
+            # 备份图像
+            backup_image_path = Path(f"{get_date_time()}_{INPUT_IMAGE_PATH}")
+            backup_image_path = Path.joinpath(Path(RECORD_IMAGE_PATH), Path(backup_image_path))
+            os.system(f"cp -f {INPUT_IMAGE_PATH} {backup_image_path}")
+            logger.success(f"已备份结果图像：{backup_image_path}")
 
     def click_box(self, box):
         x = (box[0] + box[2]) // 2
         y = (box[1] + box[3]) // 2
-        print(f"→ 点击坐标: ({x}, {y})")
+        logger.info(f"→ 点击坐标: ({x}, {y})")
 
-        with self.context.expect_page() as new_page_info:
-            self.page.mouse.click(x, y)
-        new_page = new_page_info.value
+        original_pages = self.context.pages
+        original_page_count = len(original_pages)
 
-        try:
-            new_page.wait_for_load_state("load", timeout=10000)
-            if new_page.is_closed():
-                print("⚠️ 捕获的新页面已关闭，保留当前页面不变")
-            else:
-                self.page = new_page
-                print("✅ 成功切换到新页面")
-        except Exception as e:
-            print(f"⚠️ 新页面未能加载完成，保持当前页面。错误: {e}")
+        # 先点击
+        self.page.mouse.click(x, y)
+        logger.info("点击完成，等待是否出现新页面...")
+
+        # 等待短时间，检测是否新页面被打开
+        self.page.wait_for_timeout(5000)  # 1 秒缓冲时间
+
+        new_pages = self.context.pages
+        if len(new_pages) > original_page_count:
+            # 尝试找到新打开的页面
+            for p in new_pages:
+                if p not in original_pages:
+                    try:
+                        p.wait_for_load_state("load", timeout=30000)
+                        if p.is_closed():
+                            logger.warning("⚠️ 新页面已关闭，保留原页面")
+                        else:
+                            self.page = p
+                            logger.success("✅ 成功切换到新页面")
+                    except Exception as e:
+                        logger.error(f"❌ 新页面加载失败，保持当前页面。错误: {e}")
+                    break
+        else:
+            logger.info("ℹ️ 没有新页面打开，继续使用当前页面")
 
     def type_box(self, box, text: str):
         """点击输入框并输入文本"""
         x = (box[0] + box[2]) // 2
         y = (box[1] + box[3]) // 2
-        print(f"→ 输入坐标: ({x}, {y}) 文字: {text}")
+        logger.info(f"→ 输入坐标: ({x}, {y}) 文字: {text}")
         self.page.mouse.click(x, y)
         self.page.keyboard.type(text, delay=50)
 
@@ -109,7 +139,7 @@ class webBrowserOperator:
     
     def wait(self, timeout=30000):
         """等待页面加载完成"""
-        time.sleep(1)  # 等待1秒，确保操作稳定
+        time.sleep(5)  # 等待5秒，确保操作稳定
         print("→ 等待页面加载...")
         self.agent.wait_for_load(timeout)
         
@@ -136,11 +166,11 @@ def test_web_browser_operator():
     print("✅ 已输入关键词")
     operator.wait()
 
-    # 3. 测试点击某区域（例如大致中部区域）
+    # 3. 测试点击
     click_op = {
         "type": "CLICK"
     }
-    dummy_box = [600, 300, 800, 400]  # 示例中部 box
+    dummy_box = [806, 25, 819, 40]
     operator.execute(click_op, {"box": dummy_box})
     print("✅ 已模拟点击")
 
