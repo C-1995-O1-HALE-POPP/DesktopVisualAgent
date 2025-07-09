@@ -45,3 +45,8 @@ def get_resolution(image_path):
 def encode_image_to_base64(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
+    
+def get_date_time():
+    """获取当前日期时间：yyyy-MM-dd@HH:mm:ss"""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d@%H:%M:%S")
