@@ -7,7 +7,7 @@ from pathlib import Path
 
 from utils.imageProcessing import (
     draw_box_on_image, get_resolution, encode_image_to_base64, get_date_time)
-from utils import client, INPUT_IMAGE_PATH, OUTPUT_IMAGE_PATH
+from utils import client, INPUT_IMAGE_PATH, OUTPUT_IMAGE_PATH, MAX_RETRY
 
 SYSTEM_PROMPT_UI = '''你是一个视觉助手，可以定位图像中的 UI 元素并返回坐标。
 
@@ -79,12 +79,12 @@ def parse_box_from_response(response):
         logger.info(f"模型原始回答：\n{content}")
         json_text = content.split("```json")[-1].split("```")[0].strip()
         data = json.loads(json_text)
-        for item in data:
-            if "box" in item and "screen" in item:
-                box = item["box"]
-                screen = item["screen"]
-                logger.info(f"提取到的坐标框: {box}, 分辨率: {screen}")
-                break
+        if isinstance(data, list):
+            data = data[0]
+        if "box" in data and "screen" in data:
+            box = data["box"]
+            screen = data["screen"]
+            logger.info(f"提取到的坐标框: {box}, 分辨率: {screen}")
         return data
     except Exception as e:
         logger.error(f"解析 response 失败: {e}")
@@ -97,26 +97,34 @@ def grounding(prompt, input_image_path=INPUT_IMAGE_PATH, output_image_path=OUTPU
     os.system(f"cp -f {input_image_path} {output_image_path}")
 
     rsolution_prompt = f"图像分辨率为 {get_resolution(input_image_path)}"
-    response = send_grounding_request(base64_img, rsolution_prompt + prompt)
-    box_data = parse_box_from_response(response)
-    if box_data:
-        box = item.get("box")  # type: ignore
-        screen = item.get("screen")  # type: ignore
-        label = item.get("label", "未知元素")  # type: ignore
-        if box and screen:
-            draw_box_on_image(output_image_path, box, screen, label, output_image_path)
-            if RECORD_IMAGE_PATH:
-                if not os.path.exists(RECORD_IMAGE_PATH):
-                    os.makedirs(RECORD_IMAGE_PATH)
-                # 备份图像
-                backup_image_path = Path(f"{get_date_time()}_{output_image_path}")
-                backup_image_path = Path.joinpath(Path(RECORD_IMAGE_PATH), Path(backup_image_path))
-                os.system(f"cp -f {output_image_path} {backup_image_path}")
-                logger.success(f"已保存结果图像：{backup_image_path}")
-        else:
-            raise ValueError("未能成功提取边界框或分辨率。")
-    else:
-        raise ValueError("未能从响应中解析到有效数据。")
-    return box_data
+    for i in range(MAX_RETRY):
+        try:
+            response = send_grounding_request(base64_img, rsolution_prompt + prompt)
+            box_data = parse_box_from_response(response)
+            if box_data:
+                box = box_data.get("box")  # type: ignore
+                screen = box_data.get("screen")  # type: ignore
+                label = box_data.get("label", "未知元素")  # type: ignore
+                if box and screen:
+                    draw_box_on_image(output_image_path, box, screen, label, output_image_path)
+                    if RECORD_IMAGE_PATH:
+                        if not os.path.exists(RECORD_IMAGE_PATH):
+                            os.makedirs(RECORD_IMAGE_PATH)
+                        # 备份图像
+                        backup_image_path = Path(f"{get_date_time()}_{output_image_path}")
+                        backup_image_path = Path.joinpath(Path(RECORD_IMAGE_PATH), Path(backup_image_path))
+                        os.system(f"cp -f {output_image_path} {backup_image_path}")
+                        logger.success(f"已保存结果图像：{backup_image_path}")
+                else:
+                    raise ValueError("未能成功提取边界框或分辨率。")
+            else:
+                raise ValueError("未能从响应中解析到有效数据。")
+            return box_data
+        except Exception as e:
+            logger.error(f"第 {i+1} 次尝试失败: {e}")
+            if i < MAX_RETRY - 1:
+                logger.info("正在重试...")
+
+    raise RuntimeError("所有尝试均失败，请检查输入图像和提示内容。")
 
 

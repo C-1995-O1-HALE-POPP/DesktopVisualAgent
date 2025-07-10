@@ -28,7 +28,7 @@ class BrowserAgent:
             new_page.wait_for_load_state("load", timeout=30000)
 
             if new_page.is_closed():
-                logger.warning("⚠️ 新页面已关闭，放弃切换")
+                logger.warning("新页面已关闭，放弃切换")
                 return
 
             self.page = new_page
@@ -76,15 +76,15 @@ class BrowserAgent:
                     try:
                         p.wait_for_load_state("load", timeout=30000)
                         if p.is_closed():
-                            logger.warning("⚠️ 新页面已关闭，保留原页面")
+                            logger.warning("新页面已关闭，保留原页面")
                         else:
                             self.page = p
-                            logger.success("✅ 成功切换到新页面")
+                            logger.success("成功切换到新页面")
                     except Exception as e:
                         logger.error(f"❌ 新页面加载失败，保持当前页面。错误: {e}")
                     break
         else:
-            logger.info("ℹ️ 没有新页面打开，继续使用当前页面")
+            logger.info("没有新页面打开，继续使用当前页面")
 
     def type_box(self, box, text: str):
         """点击输入框并输入文本"""
@@ -120,28 +120,40 @@ class BrowserAgent:
         logger.info("→ 页面加载完成")
 
 class webBrowserOperator:
-    def __init__(self, url):
+    def __init__(self):
         self.agent = BrowserAgent(headless=False)
+    
+    def start(self,url):
         self.agent.goto(url)
 
     def screen_shot(self):
         self.agent.capture_screenshot()
 
-    def execute(self, operation, data, text = ""):
+    def execute(self, operation, box = [114, 514, 191, 981], text = ""):
         if operation["type"] == "CLICK":
-            self.agent.click_box(data["box"])
+            self.agent.click_box(box)
         elif operation["type"] == "TYPE":
-            self.agent.type_box(data["box"], text)
+            self.agent.type_box(box, text)
         elif operation["type"] == "SCROLL":
             self.agent.scroll(operation["direction"])
         else:
             raise ValueError(f"Unknown operation type: {operation['type']}")
     
-    def wait(self, timeout=30000):
+    def wait(self, sleep_sec = 5, timeout=30000):
         """等待页面加载完成"""
-        time.sleep(5)  # 等待5秒，确保操作稳定
-        logger.info("→ 等待页面加载...")
+        time.sleep(sleep_sec)  # 等待5秒，确保操作稳定
+        logger.info("等待页面加载...")
         self.agent.wait_for_load(timeout)
+
+    def back(self):
+        """后退到上一个页面"""
+        self.agent.back()
+        logger.info("已后退到上一个页面")
+
+    def close(self):
+        """关闭浏览器"""
+        self.agent.close()
+        logger.info("浏览器已关闭")
         
 
 import time
@@ -149,7 +161,8 @@ import time
 def test_web_browser_operator():
     # 示例网址：B站首页（或你可以替换为任何支持的网页）
     url = "https://www.bilibili.com"
-    operator = webBrowserOperator(url)
+    operator = webBrowserOperator()
+    operator.start(url)
 
     # 等待页面加载
     operator.wait()
@@ -189,7 +202,7 @@ def test_web_browser_operator():
 
     # 关闭浏览器
     operator.agent.close()
-    logger.success("✅ 浏览器已关闭")
+    logger.success("浏览器已关闭")
 
 if __name__ == "__main__":
     test_web_browser_operator()
