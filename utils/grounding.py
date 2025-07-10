@@ -7,7 +7,7 @@ from pathlib import Path
 
 from utils.imageProcessing import (
     draw_box_on_image, get_resolution, encode_image_to_base64, get_date_time)
-from utils import client, INPUT_IMAGE_PATH, OUTPUT_IMAGE_PATH, MAX_RETRY
+from utils import client, INPUT_IMAGE_PATH, OUTPUT_IMAGE_PATH, MAX_RETRY, VL_MODEL, CHAT_MODEL
 
 SYSTEM_PROMPT_UI = '''你是一个视觉助手，可以定位图像中的 UI 元素并返回坐标。
 
@@ -26,6 +26,8 @@ SYSTEM_PROMPT_UI = '''你是一个视觉助手，可以定位图像中的 UI 元
     - 即使你不确定，也请勇于给出你认为最接近用户意图的内容，帮助用户完成任务。
 
 请注意：
+
+    - 即使是页面上的非文字图表也可能具有重要的交互功能，比如退出界面的叉号。你需要仔细观察理解这些非文字元素。
 
     - 用户提供指令中涉及到的的元素名称不一定与页面上的元素名称完全一致。
     
@@ -57,7 +59,7 @@ SYSTEM_PROMPT_UI = '''你是一个视觉助手，可以定位图像中的 UI 元
 
 def send_grounding_request(base64_image, prompt):
     response = client.chat.completions.create(
-        model="qwen-vl-max-latest",
+        model=VL_MODEL,
         messages=[
                     {"role": "system", "content": [{"type": "text", "text": SYSTEM_PROMPT_UI}]},
                     {

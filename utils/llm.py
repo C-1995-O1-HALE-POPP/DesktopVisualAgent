@@ -3,95 +3,77 @@ import json
 from loguru import logger
 
 from utils.imageProcessing import encode_image_to_base64
-from utils import client, INPUT_IMAGE_PATH, MAX_RETRY
+from utils import client, INPUT_IMAGE_PATH, MAX_RETRY, VL_MODEL, CHAT_MODEL
 from utils.tool import load_json_from_llm
-PIC_TO_JSON_PROMPT = """
-你是一名前端无障碍与用户体验专家。
+PIC_TO_JSON_PROMPT = """我需要你作为一名前端无障碍与用户体验专家，对提供的网页截图进行分析。请仔细观察页面，找出主要的可交互或可视信息元素，并将分析结果以结构化JSON格式呈现。
 
-请对接下来提供的网页截图进行观察，罗列页面上出现的所有可交互/可视信息元素，并以 **JSON** 形式输出结构化结果。
+具体要求如下：
 
-你必须遵守下列要求：
+1. 元素识别范围：
+   - 只关注用户会直接交互或注意的重要元素
+   - 排除背景、装饰性等次要元素
+   - 判断标准：元素面积较大、视觉特征明显、在用户操作流程中起关键作用
 
-1. 元素范围：
-    * 任何用户可以点击、触碰、滚动、输入或获得信息反馈的对象都要记录（链接、按钮、输入框、下拉框、分页器、滚动条、标签页、图片封面、播放器控件、登录浮窗等）
-    * 任何纯信息展示但可能影响感知/决策的对象也要记录（纯文本、统计数字、时间戳、提示语、徽标、图标、角标、弹窗提示、数据标签等）
+2. 每个元素需要包含以下信息：
+   - 简短易懂的名称(label)
+   - 元素类型(type)
+   - 在页面中的相对位置(position)
+   - 是可交互元素还是纯展示信息(role)
+   - 如果是文字元素，提供完整文字内容(content)
+   - 如果是图片/图标，描述其含义或用途(alt)
 
-2. 字段规范（元素级 `object`）：
+3. 注意事项：
+   - 对于被截断的文字，尽量推断完整含义
+   - 图片语义不确定时，可标注"(推测)"
+   - 确保JSON格式规范完整
 
-    | 字段         | 含义                                                                                        | 示例                                |
-    | ---------- | ----------------------------------------------------------------------------------------- | --------------------------------- |
-    | `label`    | 人类可读的简短名称；若页面上无文字可直接描述（如图标/Logo），请用「语义性描述」                                                | `"首页"`、`"bilibili logo"`、`"搜索图标"` |
-    | `type`     | 交互/展示类型 |                                   |
-    | `position` | 相对位置，用自然语言描述（如“顶部导航栏左侧”“视频卡片右上角”）                                                         |                                   |
-    | `role`     | `"interactive"`（可交互）或 `"informational"`（仅展示）                                              |                                   |
-    | `content`  | 若 `type` 为 `"文本"` 或 元素内含可见文字，请给出**完整文字**；否则填 `null`                                       | `"免费看高清视频、多端同步播放记录..."`           |
-    | `alt`      | 若 `type` 为 `"图片"` / `"图标"`，请给出**图像含义或用途的解释**；否则填 `null`                                   | `"视频封面图，沙发上坐着两个人"`                     |
+请将分析结果用```json包裹输出，包含页面类型(page_type)和所有识别到的元素(elements数组)。每个元素对象应包含label、type、position、role、content和alt字段。
 
-3. 输出格式：
-
-    ```json
+示例格式(请勿直接复制)：
+```json
+{
+  "page_type": "页面类型描述",
+  "step": null,
+  "elements": [
     {
-      "page_type": "页面/场景的简要类型描述",
-      "step": null,             // 若流程式页面可写当前步骤，否则保持 null
-      "elements": [ {…}, … ]    // 按从上到下、从左到右的顺序列出
+      "label": "元素名称",
+      "type": "元素类型",
+      "position": "位置描述",
+      "role": "interactive/informational",
+      "content": "文字内容/null",
+      "alt": "图片描述/null"
     }
-    ```
+  ]
+}
+```
 
-    - 仅输出上述 JSON，对其余内容一律不要输出
-
-4. **准确性优先级**：
-    - 当元素文字存在截断、省略号或悬浮提示，请尽量推断完整含义
-    - 对于图像无法确定全部语义时，用「大概率语义」+“(推测)”标注
-
-示例（供参考，勿复制）：
-
-    ```json
-    {
-      "page_type": "视频搜索结果页",
-      "step": null,
-      "elements": [
-        {
-          "label": "bilibili logo",
-          "type": "图片",
-          "position": "顶部左侧",
-          "role": "interactive",
-          "content": null,
-          "alt": "站点首页入口 Logo"
-
-        },
-        …
-      ]
-    }
-    ```
-
-**请严格依照以上规范输出。**
+请一次性输出完整的JSON分析结果，确保包含尽可能多的页面元素信息。
 """
 
 DESCRIBE_PROMPT = """
-你是一位网页理解专家，任务是分析用户提供的桌面截图，全面、细致地描述该页面的结构与页面上的 **所有** 内容。
+你是一位网页理解专家，任务是分析用户提供的桌面截图，全面、细致地描述该页面的结构与页面上的 **主要**内容。
 
-请根据图像回答以下问题，**务必提供具体、精细的内容分析，而不是泛泛描述**：
+请根据图像回答以下问题：
 
 1. 当前页面的主要功能或用途，例如是否是搜索页面、视频播放页、个人中心、设置页等；
 
-2. 页面中包含的关键元素，逐个列出 **每个** ：
+2. 对于页面中包含的关键元素你应该列出：
     - 元素的文字内容（如“搜索”、“首页推荐”、“综合排序”）；
     - 元素的类型（按钮 / 文本 / 输入框 / 标签 / 列表项 / 图标 等）；
     - 元素在页面中的相对位置（如“顶部左侧”、“页面正中”、“底部右侧”等）；
 
-3. 对**搜索结果、推荐列表、内容卡片等动态区域**进行结构化描述，包括：
+3. 对页面进行结构化描述，包括：
     - 每个结果项中包含的字段（如标题、作者、封面图、播放量等）；
     - 排列方式（如垂直列表、九宫格、横向滑动卡片等）；
     - 文本或图像内容（如推荐的视频标题、具体的用户信息等）；
-
-4. 区分哪些区域是用户可交互区域（如按钮、输入框、链接），哪些是信息展示区域（如正文、标签、说明文字）；
+    - 区分哪些区域是用户可交互区域（如按钮、输入框、链接），哪些是信息展示区域（如正文、标签、说明文字）；
+    - 4分析图形元素的作用，如图标按钮、封面图、功能图示等，说明它们可能对应的操作或信息。
 
 5. 如果页面属于某个多步骤流程（如注册、填写表单、支付等），请判断当前是第几步，并说明依据；
 
-6. 分析图形元素的作用，如图标按钮、封面图、功能图示等，说明它们可能对应的操作或信息。
 
 请尽可能细致地结合文字、布局与结构进行推理，帮助用户获得对当前页面的准确理解。
-输出应为自然语言段落，逐段分析你观察到的内容和推理过程。
+输出应为自然语言段落，逐段分析你观察到的内容和推理过程。请一次性地输出整个结果，即使牺牲长度。
 """
 
 DESC_TO_STATE_PROMPT = '''
@@ -223,12 +205,11 @@ OPERATION_INFERENCE_PROMPT = '''
         "reasoning": "你的思考过程，描述为什么选择这个操作",
         "action": "CLICK" / "TYPE" / "SUCCESS" / "FAIL" / "SCROLL" / "ASK_USER", # 操作类型
         "params": { 
-                # 操作参数
-            ... # 根据操作类型不同，参数内容也不同，但是必须是一个有效的 JSON 对象
+            这里填写操作参数：操作类型不同，参数内容也不同，但是必须是一个有效的 JSON 对象
         },
     }
 ```
-请不要添加任何额外的文字或解释，只返回 JSON 内容。
+请不要添加任何额外的文字或解释，只返回 JSON 内容，确保JSON的格式有效。
 '''
 
 
@@ -236,7 +217,7 @@ def ask_question_about_image(image_path: str, question: str) -> str:
     """向图像提问，使用视觉问答模型回答问题。"""
     base64_img = encode_image_to_base64(image_path)
     response = client.chat.completions.create(
-        model="qwen-vl-max-latest",
+        model=VL_MODEL,
         messages=[
             {"role": "system", "content": [{"type": "text", "text": "你是一个视觉问答助手，能回答用户提出的关于图像的问题。"}]},
             {
@@ -254,7 +235,7 @@ def describe_screen_caption(image_path: str = INPUT_IMAGE_PATH) -> str:
     """描述屏幕截图的结构和功能。"""
     base64_img = encode_image_to_base64(image_path)
     response = client.chat.completions.create(
-        model="qwen-vl-max-latest",
+        model=VL_MODEL,
         messages=[
             {"role": "system", "content": [{"type": "text", "text": DESCRIBE_PROMPT}]},
             {
@@ -275,7 +256,7 @@ def parse_page_state_from_description(description: str) -> dict:
             # 使用 Qwen Turbo 模型解析页面状态
             logger.info("正在解析页面状态...")
             response = client.chat.completions.create(
-                model="qwen-turbo",
+                model=CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": [{"type": "text", "text": DESC_TO_STATE_PROMPT}]},
                     {"role": "user", "content": [{"type": "text", "text": description}]}
@@ -295,7 +276,7 @@ def parse_image_state_to_json(image_path: str = INPUT_IMAGE_PATH):
             logger.info("正在解析图像状态...")
             base64_img = encode_image_to_base64(image_path)
             response = client.chat.completions.create(
-                model="qwen-vl-max-latest",
+                model=VL_MODEL,
                 messages=[
                     {"role": "system", "content": [{"type": "text", "text": PIC_TO_JSON_PROMPT}]},
                     {
@@ -321,7 +302,7 @@ def decide_next_action(page_state, target, history=[]):
     for i in range(MAX_RETRY):
         try:
             response = client.chat.completions.create(
-                model="qwen-turbo",
+                model=CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": [{"type": "text", "text": OPERATION_INFERENCE_PROMPT}]},
                     {

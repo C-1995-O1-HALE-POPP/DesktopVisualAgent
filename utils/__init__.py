@@ -18,7 +18,8 @@ INPUT_IMAGE_PATH = "output_screenshot.png"
 OUTPUT_IMAGE_PATH = "output_screenshot_with_box.png"
 RECORD_IMAGE_PATH = "log_image"
 MAX_RETRY = 5
-
+VL_MODEL = "qwen2.5-vl-32b-instruct"
+CHAT_MODEL = "qwen2.5-32b-instruct"
 # ======================
 from utils.webBrowser import webBrowserOperator
 browser = webBrowserOperator()
