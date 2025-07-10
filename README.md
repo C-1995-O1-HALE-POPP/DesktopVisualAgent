@@ -269,6 +269,7 @@ python vqa_and_describe_demo.py
 ## 阶段三 任务自动化
 ### 智能体架构
 
+**demo文件：`agent_demo.py`**
 ```shell
 export DASHSCOPE_API_KEY=<obtained_from_bailian_platform>
 export DASHSCOPE_API_URL="https://dashscope.aliyuncs.com/compatible-mode/v1" 
@@ -276,7 +277,10 @@ export VL_MODEL=qwen-vl-max-latest
 export CHAT_MODEL=qwen-turbo
 
 python agent_demo.py
+# 具体参数含义可见于 python agent_demo.py -h
+# 下文的分析均使用默认值
 ```
+
 ![8](images/8.png)
 
 智能体的用户输入自然语言目标指令，比如demo中的：
