@@ -75,6 +75,9 @@ def do_instruction_from_todo(todo: dict):
             running = False
             logger.success("用户确认操作成功，代理将退出。")
             return "用户确认操作成功，代理将退出。"
+        else:
+            logger.success("用户未确认操作成功，继续执行任务。")
+            return "用户未确认操作成功，继续执行任务。"
 
     elif action == "FAIL":
         browser.back()
