@@ -56,7 +56,7 @@ def do_instruction_from_todo(todo: dict):
         if params["direction"] not in {"向上", "向下", "向左", "向右"}:
             raise ValueError("[SCROLL] 方向参数无效，请选择：向上、向下、向左或向右")
 
-        browser.execute({"type": "SCROLL"}, {"direction": params["direction"]})
+        browser.execute({"type": "SCROLL", "direction": params["direction"]})
         return f"向{params['direction']}滚动页面"
     
     elif action == "ASK_USER":

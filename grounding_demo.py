@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description="使用 Qwen 模型进行图像边界框标注")
     parser.add_argument("--input", type=str, default="test.png", help="输入图像路径")
     parser.add_argument("--output", type=str, default="test_demo.png", help="输出图像路径")
-    parser.add_argument("--inst", type=str, default="请找出页面中用于输入“搜索框”相关内容的输入框，位于正上方，我将输入“洛天依演唱会”。", help="用户指令")
+    parser.add_argument("--inst", type=str, default="请找出页面中用于输入“搜索框”相关内容的输入框，我将输入“洛天依演唱会”。", help="用户指令")
     args = parser.parse_args()
     input_path, output_path, instruction = args.input, args.output, args.inst
 
